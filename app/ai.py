@@ -4,7 +4,8 @@ import json
 from app.schemas import UserInput
 from openai import OpenAI
 from app.models import BuffetItem
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
+
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -19,35 +20,26 @@ You will be provided:
 1. Detailed guest input (age, gender, dietary goal, health conditions, spice preference, allergies, etc.)
 2. A list of available buffet items for a given meal (breakfast, lunch, or dinner)
 
-Your response must adhere **strictly** to valid **raw JSON** — no markdown, no LaTeX, no commentary outside the JSON. You are expected to act as a backend system returning a payload to a UI.
+Your response must adhere strictly to valid raw JSON — no markdown, no LaTeX, no commentary outside the JSON.
 
 ### Return Format:
-
 {{
   "items": [
     {{
-      "name": "string",  // name of the recommended buffet item
-      "serving_size": "string",  // e.g. '1 cup', '200g', '2 slices'
-      "dietary_quality_score": integer (1-10),  // nutritional score (higher is better)
-      "explanation": "string",  // why this item is suitable for this guest
-      "additional_suggestion": "string (optional)"  // optional tip to enhance or adjust the meal
+      "name": "string",
+      "serving_size": "string",
+      "dietary_quality_score": integer,
+      "explanation": "string",
+      "additional_suggestion": "string (optional)"
     }}
   ],
-  "description": "string"  // overall explanation of how this selection meets the guest's needs
+  "description": "string"
 }}
-Important: Your response must begin with \"{{\" and end with \"}}\" must be valid JSON with no leading or trailing characters.
-DO NOT include:
-- Bullet points
-- Markdown formatting
-- Any text outside the JSON
 
-Consider:
-- Medical safety (e.g. allergies, malaria recovery)
-- Caloric needs (e.g. fat loss, muscle gain)
-- Taste preferences (e.g. spice level, cuisine bias)
-- Cultural sensitivity (avoid suggesting pork for guests with halal preferences, etc.)
-
-Be concise, accurate, and professional. Personalize the tone of the explanations to sound helpful and expert, not robotic.
+IMPORTANT:
+- The response must begin with '{' and end with '}'.
+- DO NOT include bullet points, markdown, or extra text.
+- Only return a valid JSON object.
 
 User Input:
 {user_input}
@@ -81,17 +73,22 @@ def generate_recommendation(user_input: UserInput, buffet_items: list[BuffetItem
         ]
     )
 
-    output = completion.choices[0].message.content
+    output = completion.choices[0].message.content.strip()
 
-   # Clean LaTeX-style wrapping like \boxed{...}
+    # Clean \boxed{...} if it exists
     if output.startswith("\\boxed{") and output.endswith("}"):
         output = output[len("\\boxed{"):-1].strip()
-        print("AI RESPONSE:\n", output)
+
+    # Ensure output starts with "{" and ends with "}"
+    if not output.startswith("{"):
+        output = "{" + output
+    if not output.endswith("}"):
+        output = output + "}"
 
     try:
         return json.loads(output)
     except json.JSONDecodeError:
-        print("JSON parse failed. Raw output was:", output)
+        print("❌ JSON parse failed. Raw output was:\n", output)
         return {
             "items": formatted_items[:3],
             "description": "AI fallback: recommended top 3 items based on general balance."
